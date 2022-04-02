@@ -4,7 +4,7 @@
 #include "tgaimage.h"
 #include "model.h"
 #include "geometry.h"
-
+#include <iostream>
 const int width = 800;
 const int height = 800;
 const int depth = 255;
@@ -45,8 +45,8 @@ Matrix viewport(int x, int y, int w, int h)
 void triangle(Vec3i t0, Vec3i t1, Vec3i t2, Vec2i uv0, Vec2i uv1, Vec2i uv2, TGAImage &image, float intensity, int *zbuffer)
 {
     if (t0.y == t1.y && t0.y == t2.y)
-        return; // i dont care about degenerate triangles
-    if (t0.y > t1.y)
+        return; //非三角形了
+    if (t0.y > t1.y)//改正位置
     {
         std::swap(t0, t1);
         std::swap(uv0, uv1);
@@ -62,13 +62,14 @@ void triangle(Vec3i t0, Vec3i t1, Vec3i t2, Vec2i uv0, Vec2i uv1, Vec2i uv2, TGA
         std::swap(uv1, uv2);
     }
 
-    int total_height = t2.y - t0.y;
+    int total_height = t2.y - t0.y; //包围高度
     for (int i = 0; i < total_height; i++)
     {
+        //二分法画三角形
         bool second_half = i > t1.y - t0.y || t1.y == t0.y;
         int segment_height = second_half ? t2.y - t1.y : t1.y - t0.y;
         float alpha = (float)i / total_height;
-        float beta = (float)(i - (second_half ? t1.y - t0.y : 0)) / segment_height; // be careful: with above conditions no division by zero here
+        float beta = (float)(i - (second_half ? t1.y - t0.y : 0)) / segment_height; // segment_height坐标不能为0;
         Vec3i A = t0 + Vec3f(t2 - t0) * alpha;
         Vec3i B = second_half ? t1 + Vec3f(t2 - t1) * beta : t0 + Vec3f(t1 - t0) * beta;
         Vec2i uvA = uv0 + (uv2 - uv0) * alpha;
@@ -80,6 +81,7 @@ void triangle(Vec3i t0, Vec3i t1, Vec3i t2, Vec2i uv0, Vec2i uv1, Vec2i uv2, TGA
         }
         for (int j = A.x; j <= B.x; j++)
         {
+            //颜色插值
             float phi = B.x == A.x ? 1. : (float)(j - A.x) / (float)(B.x - A.x);
             Vec3i P = Vec3f(A) + Vec3f(B - A) * phi;
             Vec2i uvP = uvA + (uvB - uvA) * phi;
@@ -112,28 +114,28 @@ int main(int argc, char **argv)
     }
 
     { // draw the model
-        Matrix Projection = Matrix::identity(4);
-        Matrix ViewPort = viewport(width / 8, height / 8, width * 3 / 4, height * 3 / 4);
+        Matrix Projection = Matrix::identity(4);//单位矩阵
+        Matrix ViewPort = viewport(width /8, height / 8, width * 3 / 4, height * 3 / 4);
         Projection[3][2] = -1.f / camera.z;
 
         TGAImage image(width, height, TGAImage::RGB);
         for (int i = 0; i < model->nfaces(); i++)
         {
             std::vector<int> face = model->face(i);
-            Vec3i screen_coords[3];
-            Vec3f world_coords[3];
+            Vec3i screen_coords[3];//屏幕坐标
+            Vec3f world_coords[3];//世界坐标
             for (int j = 0; j < 3; j++)
             {
-                Vec3f v = model->vert(face[j]);
-                screen_coords[j] = m2v(ViewPort * Projection * v2m(v));
+                Vec3f v = model->vert(face[j]);//模型坐标
+                screen_coords[j] = m2v(ViewPort * Projection * v2m(v));//矩阵相乘的几何意义 ：将一个坐标系中所有的点映射到另一个坐标系中去。
                 world_coords[j] = v;
             }
-            Vec3f n = (world_coords[2] - world_coords[0]) ^ (world_coords[1] - world_coords[0]);
+            Vec3f n = (world_coords[2] - world_coords[0]) ^ (world_coords[1] - world_coords[0]);//求该三角形法线
             n.normalize();
-            float intensity = n * light_dir;
+            float intensity = n * light_dir;//法线归一化求光照强度；
             if (intensity > 0)
             {
-                Vec2i uv[3];
+                Vec2i uv[3];//找到对应UV坐标
                 for (int k = 0; k < 3; k++)
                 {
                     uv[k] = model->uv(i, k);
